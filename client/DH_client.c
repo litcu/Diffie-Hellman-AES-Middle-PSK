@@ -2,15 +2,6 @@
 #include <time.h>
 #include "DH.h"
 
-/* 实现模运算 */
-int fun_mod(int a, int b)
-{
-    //TODO:完成模运算的代码
-    int c;
-    printf("模运算结果为:");
-    scanf("%d", &c);
-}
-
 /* 生成一个随机数 */
 void get_random_int(mpz_t z, mp_bitcnt_t n)
 {
@@ -50,54 +41,8 @@ void generate_p(mpz_t prime)
     }
 }
 
-/* 将生成的p和g发送给服务器告知，并接收ACK */
-int send_pubkey()
-{
-    //TODO: 完成发送公钥pg的代码
-}
-
 /* generate private key of client */
 void generate_pri_key(mpz_t pri_key)
 {
     get_random_int(pri_key, (unsigned long int)128);
-}
-
-/* 向服务器发送数据 */
-int send_data(int data)
-{
-    //TODO: 将A发送给服务器
-    return 0;
-}
-
-/* 接收服务器返回 */
-int rece_data()
-{
-    int B;
-    //TODO: 接收服务器返回的数据
-    printf("B = ");
-    scanf("%d", &B);
-    return B;
-}
-
-int main()
-{
-    DH_key dh_key;
-    mpz_t server_pub_key; // publick key(B) from server
-    mpz_inits(dh_key.p, dh_key.g, dh_key.pri_key, dh_key.pub_key, dh_key.s, server_pub_key, NULL);
-    generate_p(dh_key.p);
-    gmp_printf("p = %Zd\n", dh_key.p);
-    mpz_set_ui(dh_key.g, (unsigned long int)5); // base g = 5
-    // TODO: send p and g to server and rece ACK
-
-    generate_pri_key(dh_key.pri_key);
-    gmp_printf("a = %Zd\n", dh_key.pri_key);
-    // generate public key A of client
-    mpz_powm(dh_key.pub_key, dh_key.g, dh_key.pri_key, dh_key.p);
-    gmp_printf("A = %Zd\n", dh_key.pub_key);
-    // TODO: rece B form server
-    // mpz_set(server_pub_key, B)
-
-    mpz_clears(dh_key.p, dh_key.g, dh_key.pri_key, dh_key.pub_key, dh_key.s, server_pub_key, NULL);
-
-    return 0;
 }
