@@ -52,21 +52,27 @@ int main(int argc, char **argv)
     connfd = accept(sockfd, (struct sockaddr *)&cli, &len);
     if (connfd < 0)
     {
-        printf("Scccept Failed!\n");
+        printf("Acccept Failed!\n");
         exit(-1);
     }
+    else
+        printf("接收到来自客户端的连接...\n");
 
-    // Function for chatting between client and server
+    printf("***************************************DH***************************************\n");
     mpz_t dh_s;
     mpz_init(dh_s);
+    // 根据DH协议交换信息，得到密钥dh_s
     exchange_dh_key(connfd, dh_s);
 
-    // 声明AES加密解密所需要的变量
+    // 将密钥保存为unsigned char数组类型
     unsigned char key[32];
     mpz_get_str(key, 16, dh_s); // 将dh_s写入key
-    gmp_printf("DH协议商讨出的密钥为：%Zd\n", dh_s);
+    gmp_printf("DH得出密钥为：%Zd\n\n", dh_s);
     mpz_clear(dh_s); // 清除dh_s
+    printf("*************************************DH结束*************************************\n\n\n");
+    printf("**************************************AES**************************************\n");
 
+    // 客户端服务器通信
     trans_msg(connfd, key);
 
     close(sockfd);
@@ -76,40 +82,44 @@ int main(int argc, char **argv)
 void exchange_dh_key(int sockfd, mpz_t s)
 {
     DH_key server_dh_key;
-    mpz_t client_pub_key; // publick key(A) from client
+    mpz_t client_pub_key; // 客户端公钥
     char buf[MAX];
     mpz_inits(server_dh_key.p, server_dh_key.g, server_dh_key.pri_key,
               server_dh_key.pub_key, server_dh_key.s, client_pub_key, NULL);
     mpz_set_ui(server_dh_key.g, (unsigned long int)5); // g = 5
-    // recv p form client
+    // 从客户端接收p
     bzero(buf, MAX);
+    printf("等待从客户端接收p...\n\n");
     read(sockfd, buf, sizeof(buf));
     mpz_set_str(server_dh_key.p, buf, 16);
-    // gmp_printf("p = %Zd\n", server_dh_key.p);
+    gmp_printf("p = %Zd\n\n", server_dh_key.p);
 
-    // generate private key(b) of server
+    // 生成服务器私钥
+    printf("将生成服务器端私钥与公钥(回车继续)...\n\n");
     generate_pri_key(server_dh_key.pri_key);
-    // gmp_printf("b = %Zd\n", server_dh_key.pri_key);
+    gmp_printf("服务器的私钥为%Zd\n\n", server_dh_key.pri_key);
     // calc the public key B of server
     mpz_powm(server_dh_key.pub_key, server_dh_key.g, server_dh_key.pri_key,
              server_dh_key.p);
-
-    // send public key(B) of server to client
+    gmp_printf("服务器的公钥为%Zd\n\n", server_dh_key.pub_key);
+    // 将服务器公钥发送给客户端
     bzero(buf, MAX);
+    printf("按下回车发送公钥给客户端，并接收客户端公钥...\n");
+    getchar();
     mpz_get_str(buf, 16, server_dh_key.pub_key);
     write(sockfd, buf, sizeof(buf));
-    // gmp_printf("B = %Zd\n", server_dh_key.pub_key);
 
-    // recv A form server
+    // 接收客户端公钥
     bzero(buf, MAX);
     read(sockfd, buf, sizeof(buf));
     mpz_set_str(client_pub_key, buf, 16);
-    // gmp_printf("A = %Zd\n", client_pub_key);
+    gmp_printf("客户端公钥为%Zd\n\n", client_pub_key);
 
-    // calc key s
+    // 服务器计算DH协议生成的密钥s
+    printf("按下回车计算服务器端经过DH协议得到的密钥...\n");
+    getchar();
     mpz_powm(server_dh_key.s, client_pub_key, server_dh_key.pri_key,
              server_dh_key.p);
-    // gmp_printf("s = %Zd\n", server_dh_key.s);
     mpz_set(s, server_dh_key.s);
 
     mpz_clears(server_dh_key.p, server_dh_key.g, server_dh_key.pri_key,
@@ -122,6 +132,7 @@ void trans_msg(int sockfd, unsigned char *key)
     unsigned char expansion_key[15 * 16];
     //密钥扩展，生成轮密钥
     ScheduleKey(key, expansion_key, AES256_KEY_LENGTH, AES256_ROUND);
+    printf("初始化轮密钥完成！\n\n");
     while (1)
     {
         bzero(text, 33);
