@@ -43,7 +43,7 @@ int main(int argc, char **argv)
     }
     else
         printf("成功连接服务器！!\n");
-    
+
     printf("***************************************DH***************************************\n");
     mpz_t dh_s;
     mpz_init(dh_s);
@@ -78,7 +78,8 @@ void exchange_dh_key(int sockfd, mpz_t s)
     mpz_set_ui(client_dh_key.g, (unsigned long int)5); // base g = 5
     // 将p发送给服务器
     bzero(buf, MAX);
-    mpz_get_str(buf, 16, client_dh_key.p);
+    memcpy(buf, "pri", 3);
+    mpz_get_str(buf + 3, 16, client_dh_key.p);
     write(sockfd, buf, sizeof(buf));
 
     // 生成客户端的私钥a
@@ -95,12 +96,13 @@ void exchange_dh_key(int sockfd, mpz_t s)
     bzero(buf, MAX);
     printf("等待接收服务器的公钥, 并发送客户端公钥...\n\n");
     read(sockfd, buf, sizeof(buf));
-    mpz_set_str(server_pub_key, buf, 16); // 按16进制将buf传递给server_pub_key
+    mpz_set_str(server_pub_key, buf + 3, 16); // 按16进制将buf传递给server_pub_key
     gmp_printf("服务器的公钥为%Zd\n\n", server_pub_key);
 
     // 将客户端公钥发送给服务器
     bzero(buf, MAX);
-    mpz_get_str(buf, 16, client_dh_key.pub_key); // 按16进制将公钥传递给buf
+    memcpy(buf, "pub", 3);
+    mpz_get_str(buf + 3, 16, client_dh_key.pub_key); // 按16进制将公钥传递给buf
     write(sockfd, buf, sizeof(buf));
 
     // 客户端计算DH协议得到的密钥s
@@ -117,37 +119,38 @@ void exchange_dh_key(int sockfd, mpz_t s)
 
 void trans_msg(int sockfd, unsigned char *key)
 {
-    unsigned char text[33];
+    unsigned char text[36];
     unsigned char expansion_key[15 * 16];
+    memcpy(text, "msg", 3); // 标识消息头
     // 密钥扩展，生成轮密钥
     ScheduleKey(key, expansion_key, AES256_KEY_LENGTH, AES256_ROUND);
     printf("初始化轮密钥完成！\n\n");
     while (1)
     {
         // 输入要发送的明文
-        bzero(text, 33);
+        bzero(text + 3, 33);
         printf("要发送的明文: ");
-        scanf("%s", text);
+        scanf("%s", text + 3);
         // AES256加密
-        AesEncrypt(text, expansion_key, AES256_ROUND);
+        AesEncrypt(text + 3, expansion_key, AES256_ROUND);
         printf("密文为:\n");
-        for (int i = 0; i < 32; ++i)
+        for (int i = 3; i < 35; ++i)
             printf("%02x ", text[i]);
         printf("\n");
         // 发送密文
         write(sockfd, text, sizeof(text));
         printf("发送成功！\n等待服务器回复...\n");
         // 接收服务器发送的密文
-        bzero(text, 33);
+        bzero(text + 3, 33);
         read(sockfd, text, sizeof(text));
         printf("服务器端发送的密文：\n");
-        for (int i = 0; i < 32; ++i)
+        for (int i = 3; i < 35; ++i)
             printf("%02x ", text[i]);
         printf("\n");
         // AES256解密
-        Contrary_AesEncrypt(text, expansion_key, AES256_ROUND);
+        Contrary_AesEncrypt(text + 3, expansion_key, AES256_ROUND);
         printf("解密后的明文：");
-        for (int i = 0; i < 32; ++i)
+        for (int i = 3; i < 35; ++i)
             printf("%c", text[i]);
         printf("\n\n\n");
     }
