@@ -25,5 +25,5 @@ void get_random_int(mpz_t z, mp_bitcnt_t n)
 /* generate private key of server */
 void generate_pri_key(mpz_t pri_key)
 {
-    get_random_int(pri_key, (unsigned long int)128);
+    get_random_int(pri_key, (unsigned long int)64);
 }
