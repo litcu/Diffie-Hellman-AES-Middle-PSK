@@ -53,6 +53,7 @@ int main(int argc, char **argv)
     unsigned char key[33];
     mpz_get_str(key, 16, dh_s); // 将dh_s写入key
     gmp_printf("DH得出密钥为：%Zd\n\n", dh_s);
+    // printf("对中间人的密钥：%s\n", key);
     mpz_clear(dh_s); // 清除dh_s
     printf("*************************************DH结束*************************************\n\n\n");
     printf("**************************************AES**************************************\n");
@@ -117,7 +118,7 @@ void exchange_dh_key(int sockfd, mpz_t s)
                client_dh_key.pub_key, client_dh_key.s, server_pub_key, NULL);
 }
 
-void trans_msg(int sockfd, unsigned char *key)
+void trans_msg(int sockfd, unsigned char key[])
 {
     unsigned char text[36];
     unsigned char expansion_key[15 * 16];

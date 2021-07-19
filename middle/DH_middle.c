@@ -32,7 +32,7 @@ int check_prime(mpz_t prime)
 /* 生成客户端初始的大素数p */
 void generate_p(mpz_t prime)
 {
-    get_random_int(prime, (mp_bitcnt_t)256);
+    get_random_int(prime, (mp_bitcnt_t)128);
     while (!check_prime(prime))
     {
         // 得到比当前prime大的下一个素数
@@ -44,5 +44,5 @@ void generate_p(mpz_t prime)
 /* generate private key of client */
 void generate_pri_key(mpz_t pri_key)
 {
-    get_random_int(pri_key, (unsigned long int)128);
+    get_random_int(pri_key, (unsigned long int)64);
 }

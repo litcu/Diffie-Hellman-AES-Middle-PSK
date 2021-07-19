@@ -127,14 +127,13 @@ void exchange_dh_key(int sockfd, mpz_t s)
                server_dh_key.pub_key, server_dh_key.s, client_pub_key, NULL);
 }
 
-void trans_msg(int sockfd, unsigned char *key)
+void trans_msg(int sockfd, unsigned char key[])
 {
     unsigned char text[36];
     unsigned char expansion_key[15 * 16];
     memcpy(text, "msg", 3);
     //密钥扩展，生成轮密钥
     ScheduleKey(key, expansion_key, AES256_KEY_LENGTH, AES256_ROUND);
-    printf("初始化轮密钥完成！\n\n");
     while (1)
     {
         bzero(text + 3, 33);

