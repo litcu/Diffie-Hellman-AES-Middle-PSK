@@ -19,7 +19,7 @@ int main(int argc, char **argv)
 {
     if (argc != 2)
     {
-        printf("USAGE: ./server ListenPort\nExample: ./server 8888");
+        printf("USAGE: ./server Port\nExample: ./server 8888");
         return 0;
     }
     int sockfd, connfd, len;
