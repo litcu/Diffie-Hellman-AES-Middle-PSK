@@ -13,6 +13,7 @@
 
 void exchange_dh_key(int sockfd, mpz_t s);
 void trans_msg(int sockfd, unsigned char *key);
+void psk(int sockfd);
 
 int main(int argc, char **argv)
 {
@@ -28,7 +29,7 @@ int main(int argc, char **argv)
     if (sockfd < 0)
     {
         printf("Socket Failed!\n");
-        exit(-1);
+        exit(1);
     }
     bzero(&serv_addr, sizeof(serv_addr));
     serv_addr.sin_family = AF_INET;
@@ -39,10 +40,18 @@ int main(int argc, char **argv)
     if (connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
     {
         printf("连接服务器失败!\n");
-        exit(-1);
+        exit(1);
     }
     else
         printf("成功连接服务器！!\n");
+
+    // TODO: PSK Client
+    // PSK
+    /*
+    printf("**************************************PSK**************************************\n");
+    psk(sockfd);
+    printf("*************************************PSK结束************************************\n\n\n");
+*/
 
     printf("***************************************DH***************************************\n");
     mpz_t dh_s;
@@ -55,7 +64,7 @@ int main(int argc, char **argv)
     gmp_printf("DH得出密钥为：%Zd\n\n", dh_s);
     // printf("对中间人的密钥：%s\n", key);
     mpz_clear(dh_s); // 清除dh_s
-    printf("*************************************DH结束*************************************\n\n\n");
+    printf("*************************************DH结束************************************\n\n\n");
     printf("**************************************AES**************************************\n");
 
     trans_msg(sockfd, key);
@@ -118,6 +127,7 @@ void exchange_dh_key(int sockfd, mpz_t s)
                client_dh_key.pub_key, client_dh_key.s, server_pub_key, NULL);
 }
 
+// 客户端服务器发送接收加密后的消息
 void trans_msg(int sockfd, unsigned char key[])
 {
     unsigned char text[36];
@@ -155,4 +165,25 @@ void trans_msg(int sockfd, unsigned char key[])
             printf("%c", text[i]);
         printf("\n\n\n");
     }
+}
+
+// 客户端psk
+void psk(int sockfd)
+{
+    unsigned char text[32];                                           // 存放接收到的密文
+    unsigned char key[32] = "0a12541bc5a2d6890f2536ffccab2e";         // 预共享密钥
+    unsigned char expansion_key[15 * 16];                             // 扩展密钥
+    ScheduleKey(key, expansion_key, AES256_KEY_LENGTH, AES256_ROUND); // 轮密钥
+    bzero(text, 32);
+    read(sockfd, text, sizeof(text));
+    printf("psk字符串为: %s\n\n", text);
+    // 对字符串加密并返回给服务器
+    AesEncrypt(text, expansion_key, AES256_ROUND);
+    printf("加密后的密文：");
+    for (int i = 0; i < 32; ++i)
+        printf("%02x ", text[i]);
+    printf("\n\n");
+    printf("回车将加密后的字符串返回给服务器...\n");
+    getchar();
+    write(sockfd, text, sizeof(text));
 }

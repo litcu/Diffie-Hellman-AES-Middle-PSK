@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <time.h>
 #include "DH.h"
 
@@ -22,8 +23,25 @@ void get_random_int(mpz_t z, mp_bitcnt_t n)
     //gmp_printf("%Zd\n%Zd\n", temp, z);
 }
 
-/* generate private key of server */
+// 随机生成一个私钥
 void generate_pri_key(mpz_t pri_key)
 {
     get_random_int(pri_key, (unsigned long int)64);
+}
+
+// 生成psk需要的随机字符串
+void get_random_str(unsigned char *ch)
+{
+    int flag, charLengt;
+    int j = 0;
+    srand((unsigned)time(NULL));
+    for (int i = 0; i < PSK_LEN; ++i)
+    {
+        flag = rand() % 2;
+        if (flag)
+            ch[j++] = 'A' + rand() % 26;
+        else
+            ch[j++] = 'a' + rand() % 26;
+    }
+    ch[j] = '\0';
 }

@@ -2,6 +2,8 @@
 #include <string.h>
 #include <gmp.h>
 
+#define PSK_LEN 20 // psk模式随机生成字符串的长度
+
 typedef struct
 {
 	mpz_t p;
@@ -13,3 +15,4 @@ typedef struct
 
 void get_random_int(mpz_t z, mp_bitcnt_t n); // 随机生成一个规定范围内的整数
 void generate_pri_key(mpz_t a);
+void get_random_str(unsigned char *ch);
