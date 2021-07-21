@@ -205,7 +205,7 @@ void process_pkt(IP_T *ip_t, const struct pcap_pkthdr *pkthdr, const u_char *pac
             bzero(plain_text, 33);
             strncpy(plain_text, buf, 32);
             Contrary_AesEncrypt(plain_text, expansion_key2client, AES256_ROUND);
-            // 将其写入文件
+            // TODO: file
             fputs("客户端->服务器: ", fp);
             fputs(plain_text, fp);
             fputs("\n", fp);
@@ -281,7 +281,7 @@ void process_pkt(IP_T *ip_t, const struct pcap_pkthdr *pkthdr, const u_char *pac
             bzero(plain_text, 33);
             strncpy(plain_text, buf, 32);
             Contrary_AesEncrypt(plain_text, expansion_key2server, AES256_ROUND);
-            // 将其写入文件
+            // TODO: file
             fputs("服务器->客户端: ", fp);
             fputs(plain_text, fp);
             fputs("\n", fp);

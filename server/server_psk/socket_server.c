@@ -58,19 +58,7 @@ int main(int argc, char **argv)
     }
     else
         printf("接收到来自客户端的连接...\n");
-    /*
-    // TODO: PSK Server
-    printf("**************************************PSK**************************************\n");
-    int flag = psk(connfd);
-    if (flag)
-    {
-        printf("psk未通过！\n");
-        exit(1);
-    }
-    else
-        printf("psk通过！\n\n");
-    printf("*************************************PSK结束************************************\n\n\n");
-*/
+
     printf("***************************************DH***************************************\n");
     mpz_t dh_s;
     mpz_init(dh_s);
@@ -108,10 +96,6 @@ void exchange_dh_key(int sockfd, mpz_t s)
     mpz_set_str(server_dh_key.p, buf + 3, 16); // 将p写入server_dh_key.p
     gmp_printf("p = %Zd\n\n", server_dh_key.p);
 
-    // 用于防止中间人攻击
-    mpz_t temp;
-    mpz_init_set_str(temp, "123456789", 16);
-
     // 生成服务器私钥
     printf("将生成服务器端私钥与公钥(回车继续)...\n\n");
     generate_pri_key(server_dh_key.pri_key);
@@ -126,6 +110,13 @@ void exchange_dh_key(int sockfd, mpz_t s)
     printf("按下回车发送公钥给客户端，并接收客户端公钥...\n");
     getchar();
     memcpy(buf, "pub", 3);
+
+    // TODO: PSK
+    // 用于防止中间人攻击
+    //mpz_t temp;
+    //mpz_init_set_str(temp, "1234567890", 16);
+    //mpz_add(server_dh_key.pub_key, server_dh_key.pub_key, temp);
+
     mpz_get_str(buf + 3, 16, server_dh_key.pub_key);
     write(sockfd, buf, sizeof(buf));
 
@@ -133,6 +124,7 @@ void exchange_dh_key(int sockfd, mpz_t s)
     bzero(buf, MAX);
     read(sockfd, buf, sizeof(buf));
     mpz_set_str(client_pub_key, buf + 3, 16);
+    //mpz_sub(client_pub_key, client_pub_key, temp); // TODO: psk
     gmp_printf("客户端公钥为%Zd\n\n", client_pub_key);
 
     // 服务器计算DH协议生成的密钥s
@@ -149,6 +141,16 @@ void exchange_dh_key(int sockfd, mpz_t s)
 // 客户端服务器发送接收加密的消息
 void trans_msg(int sockfd, unsigned char key[])
 {
+    // 首先进行身份确认(预共享密钥)
+    int flag = psk(sockfd);
+    if (flag)
+    {
+        printf("psk未通过！\n");
+        exit(1);
+    }
+    else
+        printf("psk通过！\n\n");
+
     unsigned char text[36];
     unsigned char expansion_key[15 * 16];
     memcpy(text, "msg", 3);
@@ -193,22 +195,22 @@ int psk(int sockfd)
     unsigned char expansion_key[15 * 16];                     // 扩展密钥
     // 密钥扩展，生成轮密钥
     ScheduleKey(key, expansion_key, AES256_KEY_LENGTH, AES256_ROUND);
+    memcpy(ch, "pub", 3);
     get_random_str(ch + 3); // 得到随机字符串
     printf("psk随机字符串：%s\n\n", ch + 3);
     printf("回车将其发送到客户端...\n");
     getchar();
-    memcpy(ch, "msg", 3);
-    write(sockfd, ch + 3, sizeof(ch)); // 明文发送给客户端
+    write(sockfd, ch, sizeof(ch)); // 明文发送给客户端
     bzero(text, 33);
     read(sockfd, text, sizeof(text));
     printf("客户端返回的psk密文为：");
     for (int i = 0; i < 32; ++i)
         printf("%02x ", text[i]);
     printf("\n\n");
-    Contrary_AesEncrypt(text, expansion_key, AES256_ROUND);
+    Contrary_AesEncrypt(text + 3, expansion_key, AES256_ROUND);
     printf("解密得到的明文为: %s\n\n", text + 3);
     // 比较前后字符串是否相同
-    flag = strncmp(ch + 3, text, PSK_LEN);
+    flag = strncmp(ch + 3, text + 3, PSK_LEN);
 
     return flag;
 }

@@ -44,13 +44,7 @@ int main(int argc, char **argv)
     }
     else
         printf("成功连接服务器！!\n");
-    /*
-    // TODO: PSK Client
-    // PSK
-    printf("**************************************PSK**************************************\n");
-    psk(sockfd);
-    printf("*************************************PSK结束************************************\n\n\n");
-*/
+
     printf("***************************************DH***************************************\n");
     mpz_t dh_s;
     mpz_init(dh_s);
@@ -100,20 +94,24 @@ void exchange_dh_key(int sockfd, mpz_t s)
     mpz_powm(client_dh_key.pub_key, client_dh_key.g, client_dh_key.pri_key,
              client_dh_key.p);
     gmp_printf("客户端的公钥为%Zd\n\n", client_dh_key.pub_key);
-    
+
+    // TODO: PSK
+    //mpz_t temp;
+    //mpz_init_set_str(temp, "1234567890", 16);
+
     // 接收服务器的公钥B
     bzero(buf, MAX);
     printf("等待接收服务器的公钥, 并发送客户端公钥...\n\n");
     read(sockfd, buf, sizeof(buf));
     mpz_set_str(server_pub_key, buf + 3, 16); // 按16进制将buf传递给server_pub_key
-
-    
-
     gmp_printf("服务器的公钥为%Zd\n\n", server_pub_key);
+
+    //mpz_sub(server_pub_key, server_pub_key, temp); // TODO: psk
 
     // 将客户端公钥发送给服务器
     bzero(buf, MAX);
     memcpy(buf, "pub", 3);
+    //mpz_add(client_dh_key.pub_key, client_dh_key.pub_key, temp); // TODO: psk
     mpz_get_str(buf + 3, 16, client_dh_key.pub_key); // 按16进制将公钥传递给buf
     write(sockfd, buf, sizeof(buf));
 
@@ -132,6 +130,9 @@ void exchange_dh_key(int sockfd, mpz_t s)
 // 客户端服务器发送接收加密后的消息
 void trans_msg(int sockfd, unsigned char key[])
 {
+    // 预共享密钥
+    psk(sockfd);
+
     unsigned char text[36];
     unsigned char expansion_key[15 * 16];
     memcpy(text, "msg", 3); // 标识消息头
@@ -172,13 +173,12 @@ void trans_msg(int sockfd, unsigned char key[])
 // 客户端psk
 void psk(int sockfd)
 {
-    unsigned char text[36];                                           // 存放接收到的密文
+    unsigned char text[33];                                           // 存放接收到的密文
     unsigned char key[32] = "0a12541bc5a2d6890f2536ffccab2e";         // 预共享密钥
     unsigned char expansion_key[15 * 16];                             // 扩展密钥
     ScheduleKey(key, expansion_key, AES256_KEY_LENGTH, AES256_ROUND); // 轮密钥
-    bzero(text, 36);
-    memcpy(text, "msg", 3);
-    read(sockfd, text + 3, sizeof(text) - 3);
+    bzero(text, 33);
+    read(sockfd, text, sizeof(text));
     printf("psk字符串为: %s\n\n", text + 3);
     // 对字符串加密并返回给服务器
     AesEncrypt(text + 3, expansion_key, AES256_ROUND);
@@ -188,5 +188,5 @@ void psk(int sockfd)
     printf("\n\n");
     printf("回车将加密后的字符串返回给服务器...\n");
     getchar();
-    write(sockfd, text + 3, sizeof(text) - 3);
+    write(sockfd, text, sizeof(text));
 }
