@@ -40,7 +40,7 @@ int main(int argc, char **argv)
         printf("USAGE: ./middle ClientIP ServerIP");
         return 0;
     }
-    daemon(1, 1);
+    daemon(1, 1); // 后台运行
     pcap_t *descr = NULL; // 数据包捕获描述字
     int i = 0, cnt = 0;
     char errbuf[PCAP_ERRBUF_SIZE]; // 存放错误信息
@@ -205,7 +205,7 @@ void process_pkt(IP_T *ip_t, const struct pcap_pkthdr *pkthdr, const u_char *pac
             bzero(plain_text, 33);
             strncpy(plain_text, buf, 32);
             Contrary_AesEncrypt(plain_text, expansion_key2client, AES256_ROUND);
-            // TODO: file
+            
             fputs("客户端->服务器: ", fp);
             fputs(plain_text, fp);
             fputs("\n", fp);
